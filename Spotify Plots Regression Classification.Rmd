@@ -1,0 +1,423 @@
+---
+title: "ml group project"
+output:
+  html_document:
+    df_print: paged
+author: Ethan Hu, Tanner Richard, Evin Smith, Phoebe Warren
+date: 'Dec. 13, 2018'
+---
+
+```{r setup, include=FALSE}
+rm(list = ls())
+library(devtools)
+library(spotifyr)
+library(tidyverse)
+library(MASS)
+library(knitr)
+library(ggplot2)
+library(ISLR)
+library(class)
+library(rJava)
+library(glmulti)
+library(ISLR)
+library(glmnet)
+library(leaps)
+library(pROC)
+library(verification)
+knitr::opts_chunk$set(echo = TRUE) 
+#, cache = TRUE, autodep =True
+```
+
+```{r load-data, echo = FALSE}
+setwd('C://Users//User//Desktop//ml1 group project')
+spotifyset <- read.csv('SpotfiyWithModifiers.csv') #reads our gathered csv file
+sdf <- data.frame(spotifyset) #spotifyset data frame
+csdf <- subset(sdf, select = -c(1:7, 9, 12, 13, 15, 16)) #clean spotifyet data frame by deselecting various rows not helpful to our analysis
+csdf <- na.omit(csdf)
+csdf_reg_var <- csdf[,-c(1:3, 7,10,18,20,22)]
+csdf_reg_var1 <- csdf[,-c(1:3, 7,10,22)]
+```
+##Introduction
+
+## Exploratory data analysis
+
+### -Description of Data set_
+
+
+
+### _Discrete and Continuous Variables_
+
+
+
+### _Desirable Outside Information
+
+
+
+
+```{r, plot popularity against continuous predictors, fig.width=3, fig.height=3}
+p1 <- ggplot(csdf_reg_var,aes(x = danceability, y = track_popularity))+geom_point()
+p2 <- ggplot(csdf_reg_var,aes(x = energy, y = track_popularity))+geom_point()
+p3 <- ggplot(csdf_reg_var,aes(x = loudness, y = track_popularity))+geom_point()
+p4 <- ggplot(csdf_reg_var,aes(x = speechiness, y = track_popularity))+geom_point()
+p5 <- ggplot(csdf_reg_var,aes(x = acousticness, y = track_popularity))+geom_point()
+p6 <- ggplot(csdf_reg_var,aes(x = instrumentalness, y = track_popularity))+geom_point()
+p7 <- ggplot(csdf_reg_var,aes(x = liveness, y = track_popularity))+geom_point()
+p8 <- ggplot(csdf_reg_var,aes(x = tempo, y = track_popularity))+geom_point()
+p9 <- ggplot(csdf_reg_var,aes(x = duration_s, y = track_popularity))+geom_point()
+p10 <- ggplot(csdf_reg_var,aes(x = valence, y = track_popularity))+geom_point()
+# grid.arrows(c(p1,p2,p3,p4))
+```
+```{r, plot popularity against discrete predictors}
+par(mfrow = c(2,2))
+boxplot(track_popularity~ numeric_key, notch = TRUE, varwidth = TRUE, data = csdf_reg_var)
+boxplot(track_popularity~ mode_binary, notch = TRUE, varwidth = TRUE, data = csdf_reg_var) #1 for major and 0 or minor 
+boxplot(track_popularity~ time_signature, notch = TRUE, varwidth = TRUE, data = csdf_reg_var)
+```
+
+
+```{r}
+ini.model <- lm(track_popularity~danceability + energy + factor(numeric_key) + loudness + factor(mode_binary) + speechiness + acousticness + instrumentalness + liveness + valence + tempo + duration_s+ factor(time_signature), data = csdf_reg_var)
+n <- nrow(csdf_reg_var)
+resid <- residuals(ini.model)
+mse <- format(sqrt(sum(resid^2))/n, scientific = F) #0.05531
+mean_popularity <- format(mean(csdf_reg_var$track_popularity), scientific = F)
+```
+
+```{r}
+table1 = summary(ini.model)$coefficients
+table1 = signif(table1,2)
+table1[,3] =format(table1[,3], scientific = TRUE)
+kable(table1, digits = 2, caption = 'Coefficient information of initial model')
+```
+
+```{r, lm reg & prediction }
+trainindices <- sample(1:nrow(csdf_reg_var), .80*nrow(csdf_reg_var))
+testindices <- setdiff(1:nrow(csdf_reg_var), trainindices)        
+trainset <- csdf_reg_var[trainindices, ]
+testset <- csdf_reg_var[testindices, ]
+
+model1 <- lm(track_popularity~danceability + energy + factor(numeric_key) + loudness + factor(mode_binary) + speechiness + acousticness + instrumentalness + liveness + valence + tempo + duration_s+ factor(time_signature), data =trainset)
+lm.pred <- predict(model1, testset)
+mean((testset[,14]-lm.pred)^2)
+car::vif(model1)
+```
+
+
+```{r}
+regfit.full <- regsubsets(track_popularity~ danceability + energy + numeric_key + loudness + mode_binary + speechiness + acousticness + instrumentalness + liveness + valence + tempo+ duration_s+ time_signature, 
+                          data=csdf_reg_var, 
+                          nvmax=13)
+reg.summary <- summary(regfit.full)
+reg.summary$rsq
+
+par(mfrow=c(2, 2))
+plot(reg.summary$rss, 
+     xlab="Number of Variables", 
+     ylab="RSS", 
+     type="l")
+#The redisual sum of square will always go up as the number of variables increases
+
+plot(reg.summary$adjr2, 
+     xlab="Number of Variables", 
+     ylab="Adjusted RSq", 
+     type="l")
+(max<-which.max(reg.summary$adjr2))
+points(max, reg.summary$adjr2[max],  
+       col="red", 
+       cex=2, 
+       pch=20)
+# In a similar fashion we can plot the Cp and BIC
+# statistics, and indicate the models with the smallest
+# statistic using which.min().
+plot(reg.summary$cp, 
+     xlab="Number of Variables", 
+     ylab="Cp", 
+     type='l')
+(min <- which.min(reg.summary$cp))
+points(min, reg.summary$cp[min], 
+       col="red", 
+       cex=2, 
+       pch=20)
+
+(min <- which.min(reg.summary$bic))
+plot(reg.summary$bic, 
+     xlab="Number of Variables", 
+     ylab="BIC", 
+     type='l')
+points(min, reg.summary$bic[min], 
+       col="red", 
+       cex=2, 
+       pch=20)
+
+```
+```{r}
+par(mfrow = c(2,2))
+plot(regfit.full, scale="r2")
+plot(regfit.full, scale="adjr2")
+plot(regfit.full, scale="Cp")
+plot(regfit.full, scale="bic")
+
+```
+```{r}
+regfit.fwd <- regsubsets(track_popularity~ ., 
+                         data=csdf_reg_var, 
+                         nvmax=13, 
+                         method="forward")
+summary(regfit.fwd)
+regfit.bwd <- regsubsets(track_popularity~ ., 
+                         data=csdf_reg_var, 
+                         nvmax=13, 
+                         method="backward")
+summary(regfit.bwd)
+```
+```{r}
+#perform best subset selection 
+regfit.best <- regsubsets(track_popularity~ ., 
+                          data=trainset, 
+                          nvmax=13)
+test.mat <- model.matrix(track_popularity~., data = testset)
+
+#We extract coefficients of each regsubset model and multiply them into the appropriate columns of the test model matrix to form 
+#the predictions and compute the test error.
+
+val.errors <- rep(NA, 13)
+for (i in 1:13){
+  coefi <- coef(regfit.best, id =i)#the best selected model on training set/ essentially beta col vector with an additional intercept
+  #test validation model on test data set
+  pred <- test.mat[,names(coefi)] %*% coefi
+  val.errors[i] <- mean((testset$track_popularity - pred)^2)
+}
+min <- which.min(val.errors)
+plot(val.errors, 
+     xlab = 'df',
+     ylab = 'Value Error',
+     type = 'l')
+
+points(min,val.errors[min],
+       col="red",
+       cex=2, 
+       pch=20)
+```
+
+```{r}
+#best subset select model with cross validation on 10 folds of whole data set
+k <- 10 #num of folds
+set.seed(1)
+folds <- sample(1:k, nrow(csdf_reg_var), replace=TRUE) #cut function
+cv.errors <- matrix(NA, k, 13, 
+                    dimnames=list(NULL, paste(1:13)))
+
+predict.regsubsets <- function(object, newdata, id, ...){
+  form <- as.formula(object$call[[2]]) 
+  mat <- model.matrix(form, newdata)
+  coefi <- coef(object, id=id)
+  xvars <- names(coefi)
+  mat[, xvars]%*%coefi 
+}
+
+for(j in 1:k){
+  best.fit <- regsubsets(track_popularity~., data = csdf_reg_var[folds!= j,], nvmax = 13)
+  #pick rows that have been shuffled within fold sample function
+  #construct models on the rest 9 folds
+  for (i in 1:13) {
+    #for each one fold that is being drop,we perform a prediction of best subset selection model on the rest folds of training data set
+    pred <- predict(best.fit, csdf_reg_var[j,], id = i) #on the one fold that was being left out (jth) used to predict
+    #it is one value item
+    cv.errors[j, i] <- mean((csdf_reg_var$track_popularity[folds==j]-pred)^2)
+  }
+}
+
+mean.cv.errors <- apply(cv.errors, 2, mean)
+par(mfrow=c(1, 1))
+plot(mean.cv.errors, 
+     type='b', 
+     xlab='Number of Predictors',
+     ylab='CV Error',
+     main='10-fold CV Errors by 13 Predictors ')
+(min<-which.min(mean.cv.errors))
+```
+```{r, glmulti}
+n_predictors = 13
+x <- csdf_reg_var[,!names(csdf_reg_var) %in% 'track_popularity']
+y <- rep('Yes', nrow(csdf_reg_var))
+y[csdf_reg_var$track_popularity<mean(csdf_reg_var$track_popularity)] <- 'No'
+#length(y[y == 'Yes'])
+y <- factor(y)
+mydf <- data.frame(x,'popularity' = y)
+
+```
+```{r}
+num_to_keep <- 13
+glmulti.glm.out <- glmulti(mydf$popularity ~ .,
+                           data=mydf,
+                           method="h",
+                           crit = "bic",
+                           confsetsize = num_to_keep,
+                           fitfunction = "glm",
+                           family = binomial,
+                           level = 1)
+glmulti.summary <- summary(glmulti.glm.out)
+glmulti.summary$bestmodel
+
+#mydf$popularity ~ 1 + danceability + energy + numeric_key + loudness + "
+# "    mode_binary + speechiness + acousticness + instrumentalness + "     
+#"    liveness + valence + duration_s"
+```
+
+```{r}
+plot(glmulti.summary$icvalues, 
+     type='b', 
+     xlab='Item',
+     ylab='BIC',
+     main='BIC for Candidate Set')
+
+for(i in 1:num_to_keep) print(glmulti.glm.out@formulas[i])
+
+contender.sd <- sd(glmulti.summary$icvalues)
+contender.min <- glmulti.summary$icvalues[1]
+(ub <- contender.min+contender.sd) #104523.1
+(best.contenders.ic <- which(glmulti.summary$icvalues < ub))
+(num.predictors.contenders <- glmulti.glm.out@K - 1) 
+
+(min <- num.predictors.contenders[1])
+best.coef <- coef(glmulti.glm.out@objects[[min]])
+best.glm.formula <- glmulti.glm.out@formulas[[min]]
+
+my.best.model <- glm(best.glm.formula, 
+                     data=mydf, 
+                     family='binomial')
+summary(my.best.model)
+```
+
+
+```{r}
+#LoGISTICS model
+#Since in the glmulti modeling part, we have constructed a binary factor y that contains only yes or no values based on the cut-off point. We decided to use median of our track-popularity as our cut-off point.
+trainindices <- sample(1:nrow(mydf), .80*nrow(mydf))
+testindices <- setdiff(1:nrow(mydf), trainindices) 
+
+glm.fit <- glm(popularity ~ danceability + energy + numeric_key + loudness + mode_binary + speechiness + acousticness + instrumentalness + liveness + valence + duration_s,data = mydf[trainindices,],family = binomial)
+summary(glm.fit)
+#make prediciton on the test data set
+glm.prob <- predict(glm.fit, mydf[testindices,],type = 'response' )
+glm.pred <- rep('Yes', nrow(mydf[testindices,]))
+glm.pred[glm.prob<0.5] <-'No'
+error_rate <- mean(mydf[testindices,14]!=glm.pred)
+mytable <- table(mydf[testindices, 14], glm.pred)
+print(mytable)
+
+correct_pred <- sum(diag(mytable))/sum(mytable)
+error_rate1 <- (mytable['No','Yes']+mytable['Yes','No'])/sum(mytable) 
+Type1 <- mytable['No','Yes']/sum(mytable['No',])
+Type2 <- mytable['Yes','No']/sum(mytable['Yes',])
+Power <- mytable['Yes','Yes']/sum(mytable['Yes',])
+precision <- mytable['Yes','Yes']/sum(mytable[,'Yes'])
+print(paste0(c('The overall fraction of correct predicition is ', 'The overall error rate is ','Type 1 error rate is ', 'Type 2 error rate is ', 'The power of model is ', 'The precision of the model is '),c(correct_pred,error_rate1, Type1, Type2, Power, precision), sep = '.'))
+
+```
+```{r}
+#LDA model
+lda.fit <- lda(popularity ~ danceability + energy + numeric_key + loudness + mode_binary + speechiness + acousticness + instrumentalness + liveness + valence + duration_s,data = mydf[trainindices,])
+lda.pred <- predict(lda.fit, mydf[testindices,])
+mytable <- table(mydf[testindices, 14], lda.pred$class)
+print(mytable)
+
+correct_pred <- sum(diag(mytable))/sum(mytable)
+error_rate2<- (mytable['No','Yes']+mytable['Yes','No'])/sum(mytable) 
+Type1 <- mytable['No','Yes']/sum(mytable['No',])
+Type2 <- mytable['Yes','No']/sum(mytable['Yes',])
+Power <- mytable['Yes','Yes']/sum(mytable['Yes',])
+precision <- mytable['Yes','Yes']/sum(mytable[,'Yes'])
+print(paste0(c('The overall fraction of correct predicition is ', 'The overall error rate is ','Type 1 error rate is ', 'Type 2 error rate is ', 'The power of model is ', 'The precision of the model is '),c(correct_pred,error_rate2, Type1, Type2, Power, precision), sep = '.'))
+
+#QDA Model
+qda.fit <- qda(popularity ~ danceability + energy + numeric_key + loudness + mode_binary + speechiness + acousticness + instrumentalness + liveness + valence + duration_s,data = mydf[trainindices,])
+qda.pred <- predict(qda.fit, mydf[testindices,])
+mytable <- table(mydf[testindices,14],qda.pred$class)
+print(mytable)
+
+correct_pred <- sum(diag(mytable))/sum(mytable)
+error_rate3<- (mytable['No','Yes']+mytable['Yes','No'])/sum(mytable) 
+Type1 <- mytable['No','Yes']/sum(mytable['No',])
+Type2 <- mytable['Yes','No']/sum(mytable['Yes',])
+Power <- mytable['Yes','Yes']/sum(mytable['Yes',])
+precision <- mytable['Yes','Yes']/sum(mytable[,'Yes'])
+print(paste0(c('The overall fraction of correct predicition is ', 'The overall error rate is ','Type 1 error rate is ', 'Type 2 error rate is ', 'The power of model is ', 'The precision of the model is '),c(correct_pred,error_rate3, Type1, Type2, Power, precision), sep = '.'))
+
+```
+
+
+
+
+```{r}
+k_value <- seq(1,25, by = 2)
+error_rate <- c()
+for (k in k_value){
+  knn.fit <- knn(mydf[trainindices,-14], mydf[testindices, -14], mydf[trainindices,14], k = k)
+  error_rate[(k+1)/2] <- mean(mydf[testindices,14]!=knn.fit)
+}
+lowest_error <- which.min(error_rate)
+best_k <- k_value[lowest_error]
+
+# best k to construct knn model
+best_knn_fit <- knn(mydf[trainindices,-14], mydf[testindices, -14], mydf[trainindices,14], k = best_k)
+error_rate4 <- mean(mydf[testindices,14]!= best_knn_fit)
+mytable <- table(mydf[testindices,14], best_knn_fit)
+print(mytable)
+
+correct_pred <- sum(diag(mytable))/sum(mytable)
+error_rate4<- (mytable['No','Yes']+mytable['Yes','No'])/sum(mytable) 
+Type1 <- mytable['No','Yes']/sum(mytable['No',])
+Type2 <- mytable['Yes','No']/sum(mytable['Yes',])
+Power <- mytable['Yes','Yes']/sum(mytable['Yes',])
+precision <- mytable['Yes','Yes']/sum(mytable[,'Yes'])
+print(paste0(c('The overall fraction of correct predicition is ', 'The overall error rate is ','Type 1 error rate is ', 'Type 2 error rate is ', 'The power of model is ', 'The precision of the model is '),c(correct_pred,error_rate4, Type1, Type2, Power, precision), sep = '.'))
+
+```
+
+```{r}
+model <- c('Logistics','LDA','QDA','KNN')
+vec_error <- c(error_rate1,error_rate2,error_rate3, error_rate4)
+a <- data.frame(Model = model,Error_rate=vec_error)
+print(paste('The lowest error rate among all four models in steps e to j is ',vec_error[which.min(vec_error)]))
+print(paste('The best model is ',as.character(a$Model[[which.min(vec_error)]])))
+```
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
